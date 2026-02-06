@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 
 use sha2::{Digest, Sha256};
+use tracing_subscriber::{
+    fmt::{format::Pretty, time::UtcTime},
+    prelude::*,
+};
+use tracing_web::{performance_layer, MakeWebConsoleWriter};
 use worker::{
     console_debug, event, Context, Data, Env, Error, Fetch, Object, Request, Response,
     ResponseBody, Result, RouteContext, Router, Url,
@@ -52,7 +57,11 @@ async fn cache_url(ctx: &RouteContext<()>, url_str: &str) -> Result<Response> {
         400.. => {
             if let Some(obj) = get_from_r2(ctx, url_str).await? {
                 if let Some(body) = obj.body() {
-                    console_debug!("object found in R2, returning cached response");
+                    tracing::info!(
+                        url = url_str,
+                        key = obj.key(),
+                        "object found in R2, returning cached response",
+                    );
                     return Response::from_body(body.response_body()?);
                 }
             }
@@ -64,6 +73,7 @@ async fn cache_url(ctx: &RouteContext<()>, url_str: &str) -> Result<Response> {
     }
 }
 
+#[tracing::instrument(err, skip(ctx))]
 async fn get(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let q = req
         .url()?
@@ -80,6 +90,7 @@ struct PostRequest {
     access_token: String,
 }
 
+#[tracing::instrument(err, skip(ctx))]
 async fn post(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let req: PostRequest = req.json().await?;
     let api_token = ctx.env.var("API_TOKEN")?.to_string();
@@ -88,6 +99,20 @@ async fn post(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }
     cache_url(&ctx, &req.url).await?;
     Response::empty()
+}
+
+#[event(start)]
+fn start() {
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .json()
+        .with_ansi(false)
+        .with_timer(UtcTime::rfc_3339())
+        .with_writer(MakeWebConsoleWriter::default());
+    let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(perf_layer)
+        .init();
 }
 
 #[event(fetch)]

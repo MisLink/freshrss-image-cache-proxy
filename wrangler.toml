@@ -11,7 +11,19 @@ bucket_name = "freshrss-images"
 command = "cargo install -q worker-build@^0.7 && ~/.cargo/bin/worker-build --release"
 
 [observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
 enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1
 
 [env.local]
 [[env.local.r2_buckets]]
