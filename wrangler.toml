@@ -1,0 +1,21 @@
+name = "freshrss-image-cache-proxy"
+main = "build/index.js"
+compatibility_date = "2026-02-03"
+
+[[r2_buckets]]
+binding = "R2_BINDING"
+bucket_name = "freshrss-images"
+
+
+[build]
+command = "cargo install -q worker-build@^0.7 && ~/.cargo/bin/worker-build --release"
+
+[observability]
+enabled = true
+
+[env.local]
+[[env.local.r2_buckets]]
+binding = "R2_BINDING"
+bucket_name = "freshrss-images"
+[env.local.build]
+command = "cargo install -q worker-build@^0.7 && ~/.cargo/bin/worker-build"
