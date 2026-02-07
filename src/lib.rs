@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, os::macos::raw::stat};
 
 use sha2::{Digest, Sha256};
 use tracing_subscriber::{
@@ -65,6 +65,12 @@ async fn cache_url(ctx: &RouteContext<()>, url_str: &str) -> Result<Response> {
                     return Response::from_body(body.response_body()?);
                 }
             }
+            tracing::warn!(
+                url = url_str,
+                status = res.status_code(),
+                body = res.text().await.unwrap_or_default(),
+                "object not found in R2, returning fallback response",
+            );
             let fallback_url = ctx.env.var("FALLBACK_URL")?.to_string();
             let url = Url::parse(&fallback_url)?;
             Fetch::Url(url).send().await
