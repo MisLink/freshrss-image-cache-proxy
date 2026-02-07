@@ -7,8 +7,8 @@ use tracing_subscriber::{
 };
 use tracing_web::{performance_layer, MakeWebConsoleWriter};
 use worker::{
-    console_debug, event, Context, Data, Env, Error, Fetch, Headers, Object, Request, Response,
-    ResponseBody, Result, RouteContext, Router, Url,
+    event, Context, Data, Env, Error, Fetch, Headers, Object, Request, Response, ResponseBody,
+    Result, RouteContext, Router, Url,
 };
 
 fn get_r2_key(url: &str) -> String {
@@ -24,7 +24,11 @@ async fn put_in_r2(ctx: &RouteContext<()>, url: &str, res: Response) -> Result<(
     let bucket = ctx.bucket("R2_BINDING")?;
     let r = bucket.head(&key).await?;
     if r.is_some() {
-        console_debug!("object {} already exists in R2", &key);
+        tracing::info!(
+            url = url,
+            key = key,
+            "object already exists in R2, skipping put",
+        );
         return Ok(());
     }
     let value = match res.body().clone() {
@@ -47,10 +51,12 @@ async fn get_from_r2(ctx: &RouteContext<()>, url: &str) -> Result<Option<Object>
 }
 
 async fn cache_url(ctx: &RouteContext<()>, url_str: &str, headers: &Headers) -> Result<Response> {
+    let h = Headers::new();
+    h.set("User-Agent", &headers.get("User-Agent")?.unwrap_or("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36".into()))?;
     let req = Request::new_with_init(
         url_str,
         &worker::RequestInit {
-            headers: headers.clone(),
+            headers: h,
             method: worker::Method::Get,
             ..Default::default()
         },
