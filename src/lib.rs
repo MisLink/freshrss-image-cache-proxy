@@ -7,7 +7,7 @@ use tracing_subscriber::{
 };
 use tracing_web::{performance_layer, MakeWebConsoleWriter};
 use worker::{
-    event, Context, Data, Env, Error, Fetch, Headers, Object, Request, Response, ResponseBody,
+    event, Context, Data, Env, Error, Fetch, Headers, Object, Request, Response,
     Result, RouteContext, Router, Url,
 };
 
@@ -19,7 +19,7 @@ fn get_r2_key(url: &str) -> String {
     format!("{}/{}/{}", &hex[0..2], &hex[2..4], &hex[4..])
 }
 
-async fn put_in_r2(ctx: &RouteContext<()>, url: &str, res: Response) -> Result<()> {
+async fn put_in_r2(ctx: &RouteContext<()>, url: &str, body: Vec<u8>) -> Result<()> {
     let key = get_r2_key(url);
     let bucket = ctx.bucket("R2_BINDING")?;
     let r = bucket.head(&key).await?;
@@ -31,11 +31,7 @@ async fn put_in_r2(ctx: &RouteContext<()>, url: &str, res: Response) -> Result<(
         );
         return Ok(());
     }
-    let value = match res.body().clone() {
-        ResponseBody::Empty => Data::Empty,
-        ResponseBody::Body(items) => Data::Bytes(items),
-        ResponseBody::Stream(readable_stream) => Data::ReadableStream(readable_stream),
-    };
+    let value = Data::Bytes(body);
     let _ = bucket
         .put(&key, value)
         .custom_metadata(HashMap::from([("url".to_string(), url.to_string())]))
@@ -64,7 +60,7 @@ async fn cache_url(ctx: &RouteContext<()>, url_str: &str, headers: &Headers) -> 
     let mut res = Fetch::Request(req).send().await?;
     match res.status_code() {
         200..300 => {
-            put_in_r2(ctx, url_str, res.cloned()?).await?;
+            put_in_r2(ctx, url_str, res.cloned()?.bytes().await?).await?;
             Ok(res)
         }
         400.. => {
