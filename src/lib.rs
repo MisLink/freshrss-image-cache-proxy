@@ -7,7 +7,7 @@ use tracing_subscriber::{
 };
 use tracing_web::{performance_layer, MakeWebConsoleWriter};
 use worker::{
-    console_debug, event, Context, Data, Env, Error, Fetch, Object, Request, Response,
+    console_debug, event, Context, Data, Env, Error, Fetch, Headers, Object, Request, Response,
     ResponseBody, Result, RouteContext, Router, Url,
 };
 
@@ -46,9 +46,16 @@ async fn get_from_r2(ctx: &RouteContext<()>, url: &str) -> Result<Option<Object>
     bucket.get(&key).execute().await
 }
 
-async fn cache_url(ctx: &RouteContext<()>, url_str: &str) -> Result<Response> {
-    let url = Url::parse(url_str)?;
-    let mut res = Fetch::Url(url).send().await?;
+async fn cache_url(ctx: &RouteContext<()>, url_str: &str, headers: &Headers) -> Result<Response> {
+    let req = Request::new_with_init(
+        url_str,
+        &worker::RequestInit {
+            headers: headers.clone(),
+            method: worker::Method::Get,
+            ..Default::default()
+        },
+    )?;
+    let mut res = Fetch::Request(req).send().await?;
     match res.status_code() {
         200..300 => {
             put_in_r2(ctx, url_str, res.cloned()?).await?;
@@ -87,7 +94,7 @@ async fn get(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .find(|(k, _)| k == "url")
         .map(|(_, v)| v.into_owned());
     let url = q.ok_or_else(|| Error::from("missing url parameter"))?;
-    cache_url(&ctx, &url).await
+    cache_url(&ctx, &url, req.headers()).await
 }
 
 #[derive(serde::Deserialize)]
@@ -98,12 +105,12 @@ struct PostRequest {
 
 #[tracing::instrument(err, skip(ctx))]
 async fn post(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let req: PostRequest = req.json().await?;
+    let body: PostRequest = req.json().await?;
     let api_token = ctx.env.var("API_TOKEN")?.to_string();
-    if req.access_token != api_token {
+    if body.access_token != api_token {
         return Response::error("invalid access token", 403);
     }
-    cache_url(&ctx, &req.url).await?;
+    cache_url(&ctx, &body.url, req.headers()).await?;
     Response::empty()
 }
 
