@@ -1,6 +1,8 @@
 name = "freshrss-image-cache-proxy"
 main = "build/index.js"
 compatibility_date = "2026-02-03"
+workers_dev = false
+preview_urls = false
 
 [[r2_buckets]]
 binding = "R2_BINDING"

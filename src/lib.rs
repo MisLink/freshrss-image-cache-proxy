@@ -1,4 +1,4 @@
-use std::{collections::HashMap, os::macos::raw::stat};
+use std::collections::HashMap;
 
 use sha2::{Digest, Sha256};
 use tracing_subscriber::{
